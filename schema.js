@@ -1,5 +1,12 @@
-// schema.js
 export const typeDefs = `#graphql
+  type Person {
+    name: String!
+    phone: String
+    street: String!
+    city: String!
+    id: ID!
+  }
+
   type Author {
     name: String!
     born: Int
@@ -19,6 +26,7 @@ export const typeDefs = `#graphql
     username: String!
     favoriteGenre: String!
     id: ID!
+    friends: [Person!]! 
   }
 
   type Token {
@@ -26,14 +34,19 @@ export const typeDefs = `#graphql
   }
 
   type Query {
+    # Книги та автори
     bookCount: Int!
     authorCount: Int!
     allBooks(author: String, genre: String): [Book!]!
     allAuthors: [Author!]!
+    
+    # Користувач та нові сутності
     me: User
+    allPersons: [Person!]!
   }
 
-  type Mutation {
+type Mutation {
+    # 1. Мутація для книг
     addBook(
       title: String!
       author: String!
@@ -41,6 +54,10 @@ export const typeDefs = `#graphql
       genres: [String!]!
     ): Book
 
+    # 2. Мутація для друзів (ОКРЕМО)
+    addAsFriend(name: String!): User
+
+    # 3. Решта мутацій...
     editAuthor(
       name: String!
       setBornTo: Int!
@@ -55,5 +72,12 @@ export const typeDefs = `#graphql
       username: String!
       password: String!
     ): Token
+    
+    addPerson(
+      name: String!
+      phone: String
+      street: String!
+      city: String!
+    ): Person
   }
 `

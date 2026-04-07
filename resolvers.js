@@ -1,7 +1,8 @@
 import Author from './models/author.js'
 import Book from './models/book.js'
-import User from './models/user.js' // Додали імпорт моделі
-import jwt from 'jsonwebtoken'       // Додали для логіну
+import User from './models/user.js'
+import Person from './models/person.js' // Модель Person
+import jwt from 'jsonwebtoken'
 import { GraphQLError } from 'graphql'
 
 export const resolvers = {
@@ -15,7 +16,14 @@ export const resolvers = {
       return Book.find({}).populate('author')
     },
     allAuthors: async () => Author.find({}),
-    me: (root, args, context) => context.currentUser
+    
+    // Нові квері для Person та User
+    allPersons: async () => Person.find({}),
+    me: async (root, args, context) => {
+      if (!context.currentUser) return null
+      // Важливо завантажити друзів з іншої колекції через populate
+      return User.findById(context.currentUser._id).populate('friends')
+    }
   },
 
   Author: {
@@ -25,6 +33,34 @@ export const resolvers = {
   },
 
   Mutation: {
+    
+    addAsFriend: async (root, args, context) => {
+      const currentUser = context.currentUser
+      if (!currentUser) {
+        throw new GraphQLError('Not authenticated', {
+          extensions: { code: 'BAD_USER_INPUT' }
+        })
+      }
+
+      const person = await Person.findOne({ name: args.name })
+      if (!person) {
+        throw new GraphQLError('Person not found', {
+          extensions: { code: 'BAD_USER_INPUT' }
+        })
+      }
+
+      // Перевіряємо, чи немає вже цієї людини в друзях
+      const isFriend = currentUser.friends.some(
+        f => f.toString() === person._id.toString()
+      )
+
+      if (!isFriend) {
+        currentUser.friends.push(person._id)
+        await currentUser.save()
+      }
+
+      return currentUser.populate('friends')
+    },
     createUser: async (root, args) => {
       const user = new User({ 
         username: args.username, 
@@ -53,6 +89,19 @@ export const resolvers = {
       }
 
       return { value: jwt.sign(userForToken, process.env.JWT_SECRET) }
+    },
+
+    // Мутація для створення Person (щоб у Sandbox не було null)
+    addPerson: async (root, args) => {
+      const person = new Person({ ...args })
+      try {
+        await person.save()
+      } catch (error) {
+        throw new GraphQLError('Saving person failed', {
+          extensions: { code: 'BAD_USER_INPUT', invalidArgs: args.name, error }
+        })
+      }
+      return person
     },
 
     addBook: async (root, args, context) => {
@@ -101,5 +150,6 @@ export const resolvers = {
       author.born = args.setBornTo
       return author.save()
     }
+    
   }
 }
