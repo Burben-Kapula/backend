@@ -11,7 +11,7 @@ import User from './models/user.js'
 import jwt from 'jsonwebtoken'
 
 dotenv.config()
-
+console.log('Секрет завантажено:', process.env.JWT_SECRET)
 mongoose.set('strictQuery', false)
 
 console.log('Connecting to MongoDB...')
@@ -20,31 +20,41 @@ mongoose.connect(config.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB ✅'))
   .catch((error) => console.log('Error connection to MongoDB ❌:', error.message))
 
+// index.js
+
 const server = new ApolloServer({
   typeDefs,
   resolvers,
 })
 
-// ОБ'ЄДНУЄМО ВСЕ В ОДИН ЗАПУСК:
 const { url } = await startStandaloneServer(server, {
-  listen: { port: config.PORT || 4000 }, // Використовуємо порт з конфігу
+  listen: { port: config.PORT || 4000 },
   context: async ({ req }) => {
     const auth = req ? req.headers.authorization : null
+    
     if (auth && auth.startsWith('Bearer ')) {
       try {
-        const decodedToken = jwt.verify(auth.substring(7), config.JWT_SECRET)
+        const decodedToken = jwt.verify(
+          auth.substring(7), 
+          process.env.JWT_SECRET // Твій "aboba"
+        )
+        
         const currentUser = await User.findById(decodedToken.id)
+        
+        // Додай цей лог для перевірки в консолі:
+        // console.log('Authenticated user:', currentUser?.username)
+        
         return { currentUser }
       } catch (error) {
-        return null // Якщо токен битий, просто повертаємо порожній контекст
+        console.log('Token verification error:', error.message)
+        // Навіть при помилці повертаємо об'єкт
+        return {} 
       }
     }
+    
+    // Якщо хедерів немає, повертаємо порожній об'єкт
+    return {} 
   },
-  // Налаштування CORS тут:
-  cors: {
-    origin: '*', 
-    credentials: true
-  }
 })
 
 console.log(`🚀 Server ready at ${url}`)

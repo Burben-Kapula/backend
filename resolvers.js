@@ -21,14 +21,13 @@ export const resolvers = {
     allPersons: async () => Person.find({}),
     me: async (root, args, context) => {
       if (!context.currentUser) return null
-      // Важливо завантажити друзів з іншої колекції через populate
-      return User.findById(context.currentUser._id).populate('friends')
+      return context.currentUser.populate('friends')
     }
   },
 
   Author: {
     bookCount: async (root) => {
-      return Book.find({ author: root._id }).countDocuments()
+      return Book.find({ author: root.id }).countDocuments()
     }
   },
 
@@ -51,11 +50,11 @@ export const resolvers = {
 
       // Перевіряємо, чи немає вже цієї людини в друзях
       const isFriend = currentUser.friends.some(
-        f => f.toString() === person._id.toString()
+        f => f.toString() === person.id.toString()
       )
 
       if (!isFriend) {
-        currentUser.friends.push(person._id)
+        currentUser.friends.push(person.id)
         await currentUser.save()
       }
 
@@ -77,7 +76,7 @@ export const resolvers = {
     login: async (root, args) => {
       const user = await User.findOne({ username: args.username })
 
-      if (!user || args.password !== 'secret') {
+      if (!user || args.password !== 'aboba') {
         throw new GraphQLError('wrong credentials', {
           extensions: { code: 'BAD_USER_INPUT' }
         })
@@ -85,7 +84,7 @@ export const resolvers = {
 
       const userForToken = {
         username: user.username,
-        id: user._id,
+        id: user.id,
       }
 
       return { value: jwt.sign(userForToken, process.env.JWT_SECRET) }
@@ -124,7 +123,7 @@ export const resolvers = {
         }
       }
 
-      const book = new Book({ ...args, author: author._id })
+      const book = new Book({ ...args, author: author.id })
       
       try {
         await book.save()
