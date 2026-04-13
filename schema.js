@@ -21,7 +21,9 @@ export const typeDefs = `#graphql
     genres: [String!]!
     id: ID!
   }
-
+  type Subscription {
+    bookAdded: Book!
+  }
   type User {
     username: String!
     favoriteGenre: String!

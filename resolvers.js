@@ -1,9 +1,12 @@
 import Author from './models/author.js'
 import Book from './models/book.js'
 import User from './models/user.js'
-import Person from './models/person.js' // Модель Person
+import Person from './models/person.js'
 import jwt from 'jsonwebtoken'
 import { GraphQLError } from 'graphql'
+import { PubSub } from 'graphql-subscriptions' // Ensure pubsub is imported
+
+const pubsub = new PubSub()
 
 export const resolvers = {
   Query: {
@@ -16,8 +19,6 @@ export const resolvers = {
       return Book.find({}).populate('author')
     },
     allAuthors: async () => Author.find({}),
-    
-    // Нові квері для Person та User
     allPersons: async () => Person.find({}),
     me: async (root, args, context) => {
       if (!context.currentUser) return null
@@ -27,12 +28,12 @@ export const resolvers = {
 
   Author: {
     bookCount: async (root) => {
+      // Note: This can cause N+1 issues if many authors are queried.
       return Book.find({ author: root.id }).countDocuments()
     }
   },
 
   Mutation: {
-    
     addAsFriend: async (root, args, context) => {
       const currentUser = context.currentUser
       if (!currentUser) {
@@ -48,7 +49,6 @@ export const resolvers = {
         })
       }
 
-      // Перевіряємо, чи немає вже цієї людини в друзях
       const isFriend = currentUser.friends.some(
         f => f.toString() === person.id.toString()
       )
@@ -60,6 +60,7 @@ export const resolvers = {
 
       return currentUser.populate('friends')
     },
+
     createUser: async (root, args) => {
       const user = new User({ 
         username: args.username, 
@@ -76,6 +77,7 @@ export const resolvers = {
     login: async (root, args) => {
       const user = await User.findOne({ username: args.username })
 
+      // Logic check: password 'aboba' is hardcoded for now
       if (!user || args.password !== 'aboba') {
         throw new GraphQLError('wrong credentials', {
           extensions: { code: 'BAD_USER_INPUT' }
@@ -90,7 +92,6 @@ export const resolvers = {
       return { value: jwt.sign(userForToken, process.env.JWT_SECRET) }
     },
 
-    // Мутація для створення Person (щоб у Sandbox не було null)
     addPerson: async (root, args) => {
       const person = new Person({ ...args })
       try {
@@ -123,7 +124,7 @@ export const resolvers = {
         }
       }
 
-      const book = new Book({ ...args, author: author.id })
+      const book = new Book({ ...args, author: author._id })
       
       try {
         await book.save()
@@ -133,7 +134,12 @@ export const resolvers = {
         })
       }
 
-      return book.populate('author')
+      const populatedBook = await book.populate('author')
+
+      // Publish the event for Subscriptions
+      pubsub.publish('BOOK_ADDED', { bookAdded: populatedBook })
+
+      return populatedBook
     },
 
     editAuthor: async (root, args, context) => {
@@ -149,6 +155,11 @@ export const resolvers = {
       author.born = args.setBornTo
       return author.save()
     }
-    
+  },
+
+  Subscription: {
+    bookAdded: {
+      subscribe: () => pubsub.asyncIterator('BOOK_ADDED')
+    }
   }
 }
